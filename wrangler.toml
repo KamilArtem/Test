@@ -1,4 +1,4 @@
-name = "astro-agency-starter"
+name = "test"
 pages_build_output_dir = "dist"
 compatibility_date = "2024-05-01"
 compatibility_flags = ["nodejs_compat"]
@@ -9,9 +9,9 @@ compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "astro-agency-starter"
-database_id = "f1bbf4e0-9224-4fd4-afce-3fc163dd6ead"
+database_name = "test-d1"
+database_id = "a2fcb0f5-33a5-471a-98eb-d2517c11aa86"
 
 [[r2_buckets]]
 binding = "STORAGE"
-bucket_name = "astro-agency-starter-bucket"
+bucket_name = "test-bucket"

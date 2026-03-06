@@ -26,6 +26,6 @@ export default defineConfig({
             filter: (page) => !page.includes('/design-system') && !page.includes('/admin'),
         })
     ],
-    site: process.env.PUBLIC_SITE_URL || 'https://example.com', // To be updated by user
+    site: 'test',
 });
 
