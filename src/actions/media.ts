@@ -1,0 +1,112 @@
+import { defineAction, ActionError } from 'astro:actions';
+import { z } from 'astro:schema';
+import { deleteFile } from '../utils/media';
+import { Buffer } from 'node:buffer';
+
+export const upload = defineAction({
+    accept: 'form',
+    input: z.object({
+        files: z.array(z.instanceof(File)).optional(),
+        // Fallback for single file if needed, but we'll try to enforce 'files' on client
+        file: z.instanceof(File).optional(),
+    }),
+    handler: async (input, context) => {
+        const env = context.locals?.runtime?.env || import.meta.env;
+
+        // Ensure STORAGE binding exists
+        if (!env.STORAGE) {
+            throw new ActionError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'R2 STORAGE binding missing',
+            });
+        }
+
+        // Normalize input
+        let filesToUpload: File[] = [];
+        if (input.files && Array.isArray(input.files)) {
+            filesToUpload = input.files;
+        } else if (input.file) {
+            filesToUpload = [input.file];
+        }
+
+        if (filesToUpload.length === 0) {
+            throw new ActionError({
+                code: 'BAD_REQUEST',
+                message: 'No files provided',
+            });
+        }
+
+        const uploadedFiles: any[] = [];
+        const errors: any[] = [];
+
+        try {
+            // Process uploads
+            await Promise.all(filesToUpload.map(async (file) => {
+                try {
+                    let buffer: ArrayBuffer | Uint8Array = await file.arrayBuffer();
+                    let contentType = file.type;
+                    let filename = file.name;
+
+                    const key = `${Date.now()}-${filename.replace(/\s+/g, '-')}`;
+
+                    // Native R2 Upload
+                    await env.STORAGE.put(key, buffer, {
+                        httpMetadata: { contentType: contentType }
+                    });
+
+                    // Public URL generation
+                    // If env.PUBLIC_R2_URL is set, use it. Otherwise, warn or fallback.
+                    const publicUrlBase = env.PUBLIC_R2_URL;
+
+                    let publicUrl = "";
+                    if (publicUrlBase) {
+                        publicUrl = `${publicUrlBase}/${key}`;
+                    } else {
+                        // Fallback or error if critical. For now, we'll try to construct a standard R2 dev URL but it might not be reachable if access is private.
+                        // Ideally user provides PUBLIC_R2_URL.
+                        publicUrl = `https://${env.R2_BUCKET_DOMAIN || 'missing-public-url-env'}/${key}`;
+                    }
+
+                    uploadedFiles.push({ key, url: publicUrl });
+                } catch (e: any) {
+                    errors.push({ file: file.name, error: e.message });
+                }
+            }));
+
+            if (errors.length > 0 && uploadedFiles.length === 0) {
+                throw new ActionError({
+                    code: 'INTERNAL_SERVER_ERROR',
+                    message: `Failed to upload files: ${errors.map(e => e.error).join(', ')}`,
+                });
+            }
+
+            return { success: true, uploaded: uploadedFiles, errors };
+
+        } catch (error: any) {
+            console.error('Upload error:', error);
+            throw new ActionError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'System error during upload: ' + error.message,
+            });
+        }
+    },
+});
+
+export const remove = defineAction({
+    accept: 'form',
+    input: z.object({
+        key: z.string(),
+    }),
+    handler: async ({ key }, context) => {
+        const env = context.locals?.runtime?.env || import.meta.env;
+        const result = await deleteFile(env, key);
+
+        if (result.error) {
+            throw new ActionError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: result.error,
+            });
+        }
+        return { success: true, key };
+    },
+});

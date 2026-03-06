@@ -1,0 +1,113 @@
+---
+import { getDB } from "../utils/db";
+import SEO from "../components/SEO.astro";
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  favicon?: string;
+  noindex?: boolean; // Added support
+}
+
+// Fetch global config from D1
+let configMap: Record<string, any> = {};
+
+try {
+  const db = getDB(Astro);
+  if (!db) {
+    throw new Error("D1 database binding 'DB' not available");
+  }
+
+  const result = await db.prepare("SELECT key, value FROM SiteConfig").all();
+  const configs = result.results || [];
+
+  // Parse JSON values
+  configMap = configs.reduce(
+    (acc: Record<string, any>, curr: any) => {
+      try {
+        acc[curr.key] = JSON.parse(curr.value);
+      } catch {
+        acc[curr.key] = curr.value;
+      }
+      return acc;
+    },
+    {} as Record<string, any>,
+  );
+} catch (e: any) {
+  console.error("DB Error:", e);
+  // Display error on page if dev or admin to see what's wrong
+  configMap = {
+    site_info: {
+      name: "DB Connection Error",
+      description: e.message || "Check logs",
+    },
+  };
+}
+
+const { site_info, scripts } = configMap;
+
+const {
+  title = site_info?.name,
+  description = site_info?.description,
+  image = site_info?.open_graph_image,
+  favicon,
+  noindex = false,
+} = Astro.props;
+
+const seoImage = image || undefined;
+---
+
+<html lang="en">
+  <head>
+    <SEO
+      title={title ? `${title} | ${site_info?.name}` : site_info?.name}
+      description={description}
+      image={image}
+      favicon={favicon}
+      noindex={noindex}
+    />
+    <!-- Inject Custom Head Scripts -->
+    {scripts?.head && <Fragment set:html={scripts.head} />}
+  </head>
+  <body
+    class="min-h-screen flex flex-col font-body text-text-main bg-background relative"
+  >
+    <header
+      class="border-b border-gray-200 bg-surface/80 backdrop-blur-md p-4 z-50 sticky top-0"
+    >
+      <div class="container mx-auto flex justify-between items-center">
+        <a
+          href="/"
+          class="text-2xl font-heading font-bold tracking-tight text-primary transition-all"
+          >{site_info?.name}</a
+        >
+        <nav class="space-x-8 flex items-center">
+          <a href="/" class="hover:text-primary font-medium transition-colors"
+            >Home</a
+          >
+          <a
+            href="/admin"
+            class="px-5 py-2.5 bg-primary text-white font-semibold rounded-lg hover:bg-opacity-90 transition-all shadow-sm hover:translate-y-[-1px]"
+            >Admin</a
+          >
+        </nav>
+      </div>
+    </header>
+    <main class="flex-grow container mx-auto px-4 py-12 z-10 relative">
+      <slot />
+    </main>
+    <footer
+      class="py-12 text-center text-sm font-medium border-t border-gray-100 bg-surface z-10 relative mt-auto"
+    >
+      <p>
+        &copy; {new Date().getFullYear()}
+        {site_info?.name}. <span class="text-gray-400">// EST. 2024</span>
+      </p>
+    </footer>
+
+    <!-- Inject Custom Footer Scripts -->
+    {scripts?.footer && <Fragment set:html={scripts.footer} />}
+  </body>
+</html>
